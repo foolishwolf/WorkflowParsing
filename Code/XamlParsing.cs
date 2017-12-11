@@ -260,6 +260,9 @@ namespace WorkflowParsing
                 case "Switch":
                     codeStr += getSwitch(node);
                     break;
+                case "TryCatch":
+                    codeStr += getTryCatch(node);
+                    break;
                 default:
                     codeStr += getActivity(node);
                     break;
@@ -287,7 +290,10 @@ namespace WorkflowParsing
             string id =
                 ((XmlElement)rootNode).HasAttribute("x:Name")
                 ? rootNode.Attributes["x:Name"].Value
-                : rootNode.Attributes["sap2010:WorkflowViewState.IdRef"].Value;
+                : (
+                ((XmlElement)rootNode).HasAttribute("sap2010:WorkflowViewState.IdRef") 
+                ? rootNode.Attributes["sap2010:WorkflowViewState.IdRef"].Value
+                : rootNode["sap2010:WorkflowViewState.IdRef"].InnerText);
             if (xNodeDict.ContainsKey(id))
             {
                 return xNodeDict[id];
@@ -567,7 +573,9 @@ namespace WorkflowParsing
             string codeStr = "";
             var EnumVarStr = "";
             var IterItemStr = "";
-            EnumVarStr = rootNode["ForEach.Values"].InnerText;
+            EnumVarStr = ((XmlElement)rootNode).GetElementsByTagName("ForEach.Values").Count > 0 
+                ? rootNode["ForEach.Values"].InnerText 
+                : "";
             foreach (XmlNode node in rootNode["ActivityAction"].ChildNodes)
             {
                 switch (node.Name)
@@ -585,6 +593,27 @@ namespace WorkflowParsing
                 }
             }
             codeStr += "}\n";
+            return codeStr;
+        }
+        private string getTryCatch(XmlNode rootNode)
+        {
+            string codeStr = "";
+            foreach(XmlNode node in rootNode.ChildNodes)
+            {
+                switch (node.Name)
+                {
+                    case "TryCatch.Try":
+                        codeStr += "try{\n" + getSeq(node) + "}\n";
+                        break;
+                    case "TryCatch.Catches":
+                        ActActionCls actAction = getActAction(node["Catch"]["ActivityAction"]);
+                        codeStr += "catch(" + actAction.argType + " " + actAction.argVal + ")\n{\n";
+                        codeStr += actAction.codeStr + "}\n";
+                        break;
+                    default:
+                        break;
+                }
+            }
             return codeStr;
         }
         private string getActivity(XmlNode rootNode)
@@ -634,9 +663,53 @@ namespace WorkflowParsing
                     {
                         codeStr += "var " + node["OutArgument"].FirstChild.InnerText + " = " + actVarName + Regex.Replace(node.Name, @".*\.", ".") + ";\n";
                     }
+                    else
+                    {
+                        string inArgTypeStr = "";
+                        string inArgValStr = "";
+                        foreach (XmlNode childNode in node["ActivityAction"].ChildNodes)
+                        {
+                            switch (childNode.Name)
+                            {
+                                case "ActivityAction.Argument":
+                                    inArgTypeStr = childNode["DelegateInArgument"].Attributes["x:TypeArguments"].Value;
+                                    inArgValStr = childNode["DelegateInArgument"].Attributes["Name"].Value;
+                                    codeStr += inArgTypeStr + " " + inArgValStr + " = " + actVarName + node.Name.Substring(rootNode.Name.Length) + "();\n";
+                                    break;
+                                default:
+                                    codeStr += getStatement(childNode);
+                                    break;
+                            }
+                        }
+                        codeStr += "});\n";
+                    }
                 }
             }
             return codeStr;
+        }
+        private class ActActionCls
+        {
+            public string argType;
+            public string argVal;
+            public string codeStr;
+        }
+        private ActActionCls getActAction(XmlNode rootNode)
+        {
+            ActActionCls actAction = new ActActionCls();
+            foreach (XmlNode node in rootNode.ChildNodes)
+            {
+                switch (node.Name)
+                {
+                    case "ActivityAction.Argument":
+                        actAction.argType = Regex.Replace(node["DelegateInArgument"].Attributes["x:TypeArguments"].Value, @".*:", "");
+                        actAction.argVal = node["DelegateInArgument"].Attributes["Name"].Value;
+                        break;
+                    default:
+                        actAction.codeStr += getStatement(node);
+                        break;
+                }
+            }
+            return actAction;
         }
         private string getVarInit(XmlNode rootNode)
         {

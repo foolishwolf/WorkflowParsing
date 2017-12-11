@@ -144,19 +144,30 @@ namespace WorkflowParsing
         {
             WfParsing wfParsing = new WfParsing();
             //string xamlListPath = args.Length > 0 ? args[0] : "..\\..\\..\\BOC.Workflow.UnitTest\\WF\\Center";
-            string xamlListPath = args.Length > 0 ? args[0] : ConfigurationManager.AppSettings.Get("XamlListPath");
+            string inputPath = args.Length > 0 ? args[0] : ConfigurationManager.AppSettings.Get("XamlListPath");
             List<string> filePathArr = new List<string>();
-            if (Directory.Exists(xamlListPath))
+            if (Directory.Exists(inputPath))
             {
-                wfParsing.readFolder(xamlListPath, ref filePathArr);
+                wfParsing.readFolder(inputPath, ref filePathArr);
             }
-            else if (File.Exists(xamlListPath))
+            else if (File.Exists(inputPath))
             {
-                wfParsing.readJson(xamlListPath, ref filePathArr);
+                switch (inputPath.Split('.').Last())
+                {
+                    case "xaml":
+                        filePathArr.Add(inputPath);
+                        break;
+                    case "json":
+                        wfParsing.readJson(inputPath, ref filePathArr);
+                        break;
+                    default:
+                        Console.WriteLine("Error: Invalid directory - " + inputPath);
+                        return;
+                }
             }
             else
             {
-                Console.WriteLine("Error: Invalid directory - " + xamlListPath);
+                Console.WriteLine("Error: Invalid directory - " + inputPath);
                 return;
             }
             string outCsFolderPath = args.Length > 1 ? args[1] : ConfigurationManager.AppSettings.Get("CsFolderPath");
